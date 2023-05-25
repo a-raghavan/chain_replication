@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.cr";
+option java_outer_classname = "CRProto";
+option objc_class_prefix = "HLW";
+
+package cr;
+
+service ChainReplication {
+  rpc Sync (SyncRequest) returns (SyncResponse) {}
+  rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
+}
+
+message AppendEntriesRequest {
+  int64 seqnum = 1;
+  string command = 2;
+  string key = 3;
+  string value = 4;
+  string client = 5;
+}
+
+message AppendEntriesResponse {
+  bool success = 1;
+}
+
+message BucketEntry {
+  string key = 1;
+  string value = 2;
+}
+
+message SyncRequest {
+  repeated BucketEntry bucket = 1; 
+}
+
+message SyncResponse {
+  bool success = 1;
+}
