@@ -9,7 +9,7 @@ import chainreplication_pb2_grpc
 import database_pb2
 import database_pb2_grpc
 
-class ChainReplicator:
+class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, database_pb2_grpc.DatabaseServicer):
 
     def __init__(self, nodeport:str) -> None:
         self.bootstrap = True
@@ -29,6 +29,7 @@ class ChainReplicator:
         self.db = self.setupDB(id)      
 
         # start chain replication grpc server thread
+        self.crthread = threading.Thread(self.__chainReplicationListener)
         
         # Current tail notices when a new node is created in ZK
         # It starts propagating new reqs to the new node. 
@@ -50,6 +51,7 @@ class ChainReplicator:
 
         
         # start gRPC database server thread
+        self.dbthread = threading.Thread(self.__databaseListener)
         
         self.peer = None                         # peer is initially none since i'm the tail
         
@@ -57,15 +59,46 @@ class ChainReplicator:
 
         self.bootstrap = False
  
-
         return
 
     def __del__(self):
         self.zk.stop()
     
+    def __chainReplicationListener(self):
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        chainreplication_pb2_grpc.add_ChainReplicationServicer_to_server(self, server)
+        server.add_insecure_port('[::]:' + "50051")
+        server.start()
+        print("Chain replication server started, listening on " + "50051")
+        server.wait_for_termination()
+    
+    def __databaseListener(self):
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        database_pb2_grpc.add_DatabaseServicer_to_server(self, server)
+        server.add_insecure_port('[::]:' + "50052")
+        server.start()
+        print("Database server started, listening on " + "50052")
+        server.wait_for_termination()
+
     def syncWithCurrentTail(self):
-        
+        # TODO
         return
+
+    def Sync(self, request, context):
+        # TODO
+        return chainreplication_pb2.SyncResponse(success=True)
+    
+    def AppendEntries(self, request, context):
+        # TODO
+        return chainreplication_pb2.AppendEntriesResponse(success=True)
+    
+    def Get(self, request, context):
+        # TODO
+        return database_pb2.GetResponse(value='')
+    
+    def Put(self, request, context):
+        # TODO
+        return database_pb2.PutResponse(errormsg='')
 
     def setupDB(self, id):
         '''
