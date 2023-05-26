@@ -25,7 +25,7 @@ class AppendEntriesResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
-class BucketEntry(_message.Message):
+class KVPair(_message.Message):
     __slots__ = ["key", "value"]
     KEY_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
@@ -34,13 +34,13 @@ class BucketEntry(_message.Message):
     def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class SyncRequest(_message.Message):
-    __slots__ = ["bucket"]
-    BUCKET_FIELD_NUMBER: _ClassVar[int]
-    bucket: _containers.RepeatedCompositeFieldContainer[BucketEntry]
-    def __init__(self, bucket: _Optional[_Iterable[_Union[BucketEntry, _Mapping]]] = ...) -> None: ...
+    __slots__ = []
+    def __init__(self) -> None: ...
 
 class SyncResponse(_message.Message):
-    __slots__ = ["success"]
+    __slots__ = ["entries", "success"]
+    ENTRIES_FIELD_NUMBER: _ClassVar[int]
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    entries: _containers.RepeatedCompositeFieldContainer[KVPair]
     success: bool
-    def __init__(self, success: bool = ...) -> None: ...
+    def __init__(self, success: bool = ..., entries: _Optional[_Iterable[_Union[KVPair, _Mapping]]] = ...) -> None: ...

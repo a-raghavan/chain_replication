@@ -24,15 +24,16 @@ message AppendEntriesResponse {
   bool success = 1;
 }
 
-message BucketEntry {
+message KVPair {
   string key = 1;
   string value = 2;
 }
 
 message SyncRequest {
-  repeated BucketEntry bucket = 1; 
+
 }
 
 message SyncResponse {
   bool success = 1;
+  repeated KVPair entries = 2;
 }
