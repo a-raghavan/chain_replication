@@ -24,6 +24,11 @@ class DatabaseStub(object):
                 request_serializer=database__pb2.PutRequest.SerializeToString,
                 response_deserializer=database__pb2.PutResponse.FromString,
                 )
+        self.PutResult = channel.unary_unary(
+                '/database.Database/PutResult',
+                request_serializer=database__pb2.PutResultRequest.SerializeToString,
+                response_deserializer=database__pb2.PutResultResponse.FromString,
+                )
 
 
 class DatabaseServicer(object):
@@ -41,6 +46,12 @@ class DatabaseServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PutResult(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_DatabaseServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -53,6 +64,11 @@ def add_DatabaseServicer_to_server(servicer, server):
                     servicer.Put,
                     request_deserializer=database__pb2.PutRequest.FromString,
                     response_serializer=database__pb2.PutResponse.SerializeToString,
+            ),
+            'PutResult': grpc.unary_unary_rpc_method_handler(
+                    servicer.PutResult,
+                    request_deserializer=database__pb2.PutResultRequest.FromString,
+                    response_serializer=database__pb2.PutResultResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -95,5 +111,22 @@ class Database(object):
         return grpc.experimental.unary_unary(request, target, '/database.Database/Put',
             database__pb2.PutRequest.SerializeToString,
             database__pb2.PutResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def PutResult(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/database.Database/PutResult',
+            database__pb2.PutResultRequest.SerializeToString,
+            database__pb2.PutResultResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

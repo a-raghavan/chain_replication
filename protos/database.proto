@@ -10,6 +10,7 @@ package database;
 service Database {
   rpc Get (GetRequest) returns (GetResponse) {}
   rpc Put (PutRequest) returns (PutResponse) {}
+  rpc PutResult (PutResultRequest) returns (PutResultResponse) {}
 }
 
 message GetRequest {
@@ -21,10 +22,21 @@ message GetResponse {
 }
 
 message PutRequest {
-  string key = 1;
-  string value = 2;
+  int64 seqnum = 1;
+  string key = 2;
+  string value = 3;
 }
 
 message PutResponse {
-  string errormsg = 1;
+
+}
+
+// I should perhaps use a different proto file for this, but meh
+message PutResultRequest {
+  int64 seqnum = 1;
+  bool success = 2;
+}
+
+message PutResultResponse {
+
 }

@@ -17,15 +17,27 @@ class GetResponse(_message.Message):
     def __init__(self, value: _Optional[str] = ...) -> None: ...
 
 class PutRequest(_message.Message):
-    __slots__ = ["key", "value"]
+    __slots__ = ["key", "seqnum", "value"]
     KEY_FIELD_NUMBER: _ClassVar[int]
+    SEQNUM_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
     key: str
+    seqnum: int
     value: str
-    def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    def __init__(self, seqnum: _Optional[int] = ..., key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class PutResponse(_message.Message):
-    __slots__ = ["errormsg"]
-    ERRORMSG_FIELD_NUMBER: _ClassVar[int]
-    errormsg: str
-    def __init__(self, errormsg: _Optional[str] = ...) -> None: ...
+    __slots__ = []
+    def __init__(self) -> None: ...
+
+class PutResultRequest(_message.Message):
+    __slots__ = ["seqnum", "success"]
+    SEQNUM_FIELD_NUMBER: _ClassVar[int]
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    seqnum: int
+    success: bool
+    def __init__(self, seqnum: _Optional[int] = ..., success: bool = ...) -> None: ...
+
+class PutResultResponse(_message.Message):
+    __slots__ = []
+    def __init__(self) -> None: ...
