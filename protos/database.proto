@@ -26,6 +26,7 @@ message PutRequest {
   int64 seqnum = 1;
   string key = 2;
   string value = 3;
+  string client = 4;
 }
 
 message PutResponse {

@@ -11,26 +11,30 @@ class GetRequest(_message.Message):
     def __init__(self, key: _Optional[str] = ...) -> None: ...
 
 class GetResponse(_message.Message):
-    __slots__ = ["success", "value"]
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["error", "value"]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
-    success: str
+    error: str
     value: str
-    def __init__(self, success: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    def __init__(self, error: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class PutRequest(_message.Message):
-    __slots__ = ["key", "seqnum", "value"]
+    __slots__ = ["client", "key", "seqnum", "value"]
+    CLIENT_FIELD_NUMBER: _ClassVar[int]
     KEY_FIELD_NUMBER: _ClassVar[int]
     SEQNUM_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
+    client: str
     key: str
     seqnum: int
     value: str
-    def __init__(self, seqnum: _Optional[int] = ..., key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    def __init__(self, seqnum: _Optional[int] = ..., key: _Optional[str] = ..., value: _Optional[str] = ..., client: _Optional[str] = ...) -> None: ...
 
 class PutResponse(_message.Message):
-    __slots__ = []
-    def __init__(self) -> None: ...
+    __slots__ = ["error"]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    error: str
+    def __init__(self, error: _Optional[str] = ...) -> None: ...
 
 class PutResultRequest(_message.Message):
     __slots__ = ["seqnum", "success"]

@@ -103,8 +103,10 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         
         self.sentQueue = deque()                 # sent queue contains entries sent to peer not acked by tail
 
+        self.zk.get("/tail", watch=self.tailChanged)
+        self.zk.get("/head", watch=self.tailChanged)
         self.zk.get_children("/cluster", watch=self.clusterChanged)
-        logger.debug("ZK cluster children watcher enabled")
+        logger.debug("ZK Watchers enabled")
 
         signal.signal(signal.SIGINT, self.signalHandler)
 
@@ -113,13 +115,24 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         return
 
+    def tailChanged(self, event):
+        logger = getLogger(self.tailChanged.__qualname__)
+        if event.type == EventType.CHANGED:
+            self.tail = self.zk.get("/tail")[0].decode()
+            logger.info("Tail updated to " + self.tail)
+    
+    def headChanged(self, event):
+        logger = getLogger(self.headChanged.__qualname__)
+        if event.type == EventType.CHANGED:
+            self.head = self.zk.get("/head")[0].decode()
+            logger.info("Head updated to " + self.head)
+    
     def clusterChanged(self, event):
         logger = getLogger(self.clusterChanged.__qualname__)
         if event.type == EventType.CHILD:
             peers = self.zk.get_children("/cluster")
             try:
                 mynextnode = next(pnode for pnode in peers if pnode > self.myzknode)
-                logger.debug(self.myzknode+ "-" + mynextnode)
                 peernodeport = self.zk.get("/cluster/" + mynextnode)[0].decode()
             except StopIteration as e:
                 peernodeport = ""
@@ -271,7 +284,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         if self.head == self.mycrnodeport:
             logger.info("Put request received")
 
-            self.AppendEntries(chainreplication_pb2.AppendEntriesRequest(seqnum=request.seqnum, command="PUT", key=request.key, value=request.value, client=context.peer()))
+            self.AppendEntries(chainreplication_pb2.AppendEntriesRequest(seqnum=request.seqnum, command="PUT", key=request.key, value=request.value, client=request.client), None)
             return database_pb2.PutResponse(error="")
         
         logger.debug("Get request sent to non-head server")

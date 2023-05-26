@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x64\x61tabase.proto\x12\x08\x64\x61tabase\"\x19\n\nGetRequest\x12\x0b\n\x03key\x18\x01 \x01(\t\"-\n\x0bGetResponse\x12\x0f\n\x07success\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"8\n\nPutRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\"\r\n\x0bPutResponse\"3\n\x10PutResultRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0f\n\x07success\x18\x02 \x01(\x08\"\x13\n\x11PutResultResponse2\xbe\x01\n\x08\x44\x61tabase\x12\x34\n\x03Get\x12\x14.database.GetRequest\x1a\x15.database.GetResponse\"\x00\x12\x34\n\x03Put\x12\x14.database.PutRequest\x1a\x15.database.PutResponse\"\x00\x12\x46\n\tPutResult\x12\x1a.database.PutResultRequest\x1a\x1b.database.PutResultResponse\"\x00\x42\x30\n\x18io.grpc.examples.leveldbB\x0cLevelDBProtoP\x01\xa2\x02\x03HLWb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x64\x61tabase.proto\x12\x08\x64\x61tabase\"\x19\n\nGetRequest\x12\x0b\n\x03key\x18\x01 \x01(\t\"+\n\x0bGetResponse\x12\r\n\x05\x65rror\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"H\n\nPutRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\r\n\x05value\x18\x03 \x01(\t\x12\x0e\n\x06\x63lient\x18\x04 \x01(\t\"\x1c\n\x0bPutResponse\x12\r\n\x05\x65rror\x18\x01 \x01(\t\"3\n\x10PutResultRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0f\n\x07success\x18\x02 \x01(\x08\"\x13\n\x11PutResultResponse2\xbe\x01\n\x08\x44\x61tabase\x12\x34\n\x03Get\x12\x14.database.GetRequest\x1a\x15.database.GetResponse\"\x00\x12\x34\n\x03Put\x12\x14.database.PutRequest\x1a\x15.database.PutResponse\"\x00\x12\x46\n\tPutResult\x12\x1a.database.PutResultRequest\x1a\x1b.database.PutResultResponse\"\x00\x42\x30\n\x18io.grpc.examples.leveldbB\x0cLevelDBProtoP\x01\xa2\x02\x03HLWb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'database_pb2', globals())
@@ -24,15 +24,15 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _GETREQUEST._serialized_start=28
   _GETREQUEST._serialized_end=53
   _GETRESPONSE._serialized_start=55
-  _GETRESPONSE._serialized_end=100
-  _PUTREQUEST._serialized_start=102
-  _PUTREQUEST._serialized_end=158
-  _PUTRESPONSE._serialized_start=160
-  _PUTRESPONSE._serialized_end=173
-  _PUTRESULTREQUEST._serialized_start=175
-  _PUTRESULTREQUEST._serialized_end=226
-  _PUTRESULTRESPONSE._serialized_start=228
-  _PUTRESULTRESPONSE._serialized_end=247
-  _DATABASE._serialized_start=250
-  _DATABASE._serialized_end=440
+  _GETRESPONSE._serialized_end=98
+  _PUTREQUEST._serialized_start=100
+  _PUTREQUEST._serialized_end=172
+  _PUTRESPONSE._serialized_start=174
+  _PUTRESPONSE._serialized_end=202
+  _PUTRESULTREQUEST._serialized_start=204
+  _PUTRESULTREQUEST._serialized_end=255
+  _PUTRESULTRESPONSE._serialized_start=257
+  _PUTRESULTRESPONSE._serialized_end=276
+  _DATABASE._serialized_start=279
+  _DATABASE._serialized_end=469
 # @@protoc_insertion_point(module_scope)
