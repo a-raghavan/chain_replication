@@ -1,5 +1,4 @@
 from kazoo.client import KazooClient
-import kazoo.exceptions as zke
 from kazoo.protocol.states import EventType
 import leveldb
 from collections import deque
@@ -14,6 +13,18 @@ import time
 from enum import Enum
 import signal
 from sys import exit
+import logging
+
+logLevel = logging.DEBUG
+
+def getLogger(source):
+    logger = logging.getLogger(source)
+    c_handler = logging.StreamHandler()
+    c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+    c_handler.setFormatter(c_format)
+    logger.addHandler(c_handler)
+    logger.setLevel(logLevel)
+    return logger
 
 class QueueEntryState(Enum):
     INIT = 0
@@ -33,6 +44,7 @@ class QueueEntry:
 class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, database_pb2_grpc.DatabaseServicer):
 
     def __init__(self, dbNodePort:str, crNodePort:str) -> None:
+        logger = getLogger(__name__)
         self.bootstrap = True
         
         self.mycrnodeport = crNodePort        # my CR node port
@@ -41,13 +53,17 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         self.zk = KazooClient(hosts='127.0.0.1:2181')
         self.zk.start()
 
+        logger.debug("Started Zookeeper Client")
+
         # ensure necessart zk paths
         self.zk.ensure_path("/cluster")
         self.zk.ensure_path("/tail")
         self.zk.ensure_path("/head")
 
         # instantiate levelDB
-        self.db = self.setupDB(id)      
+        self.db = self.setupDB(crNodePort.split(':')[1])
+
+        logger.debug("LevelDB set up")
 
         self.crthreadpool = futures.ThreadPoolExecutor(max_workers=1)
 
@@ -60,17 +76,23 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         self.myzknode = self.zk.create(path="/cluster/guid_", value=crNodePort.encode(), ephemeral=True, sequence=True)
 
+        logger.info("Zookeeper cluster updated, mynode = " + self.myzknode)
+
         peers = self.zk.get_children(path="/cluster")
         if len(peers) == 0:
+            logger.info("I am the only server")
             self.head = crNodePort
             self.tail = crNodePort
             self.zk.set("/head", crNodePort.encode())
+            logger.info("ZK head node updated")
         else:
             # sync from curr tail
             self.syncWithCurrentTail(max(peers))
+            logger.info("Sync completed with current tail")
             self.tail = crNodePort
         
         self.zk.set("/tail", crNodePort.encode())
+        logger.info("ZK tail node updated")
 
         # start gRPC database server thread
         self.dbthread = threading.Thread(self.__databaseListener, dbNodePort)
@@ -80,6 +102,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         self.sentQueue = deque()                 # sent queue contains entries sent to peer not acked by tail
 
         self.zk.get_children("/cluster", watch=self.clusterChanged)
+        logger.debug("ZK cluster children watcher enabled")
 
         signal.signal(signal.SIGINT, self.signalHandler)
 
@@ -89,11 +112,15 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         return
 
     def clusterChanged(self, event):
+        logger = getLogger(__name__)
         if event.type == EventType.CHILD:
             peers = self.zk.get_children("/cluster")
 
             mynextnode = next(pnode for pnode in peers if pnode > self.mycrnodeport)
             peernodeport = self.zk.get("/cluster/" + mynextnode)[0]
+
+            if self.peer != peernodeport:
+                logger.info("Peer updated to " + peernodeport)
 
             self.peer = peernodeport
             
@@ -103,22 +130,25 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         self.zk.stop()
     
     def __chainReplicationListener(self, crNodePort):
+        logger = getLogger(__name__)
         self.crserver = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
         chainreplication_pb2_grpc.add_ChainReplicationServicer_to_server(self, self.crserver)
         self.crserver.add_insecure_port(crNodePort)
         self.crserver.start()
-        print("Chain replication server started, listening on " + crNodePort)
+        logger.info("Chain replication server started, listening on " + crNodePort)
         self.crserver.wait_for_termination()
     
     def __databaseListener(self, dbNodePort):
+        logger = getLogger(__name__)
         self.dbserver = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
         database_pb2_grpc.add_DatabaseServicer_to_server(self, self.dbserver)
         self.dbserver.add_insecure_port(dbNodePort)
         self.dbserver.start()
-        print("Database server started, listening on " + dbNodePort)
+        logger.info("Database server started, listening on " + dbNodePort)
         self.dbserver.wait_for_termination()
 
     def syncWithCurrentTail(self, tailzknode):
+        logger = getLogger(__name__)
         # get current tail
         tailNodePort = self.zk.get("/cluster/"+tailzknode)[0]
 
@@ -130,28 +160,41 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                 try:
                     response = stub.Sync(chainreplication_pb2.SyncRequest())
                 except Exception as e:
+                    logger.error("GRPC exception" + str(e))
                     time.sleep(0.5)
                     continue
-        
+            
+        logger.info("Response from grpc received!")
+
         # commit response entries to levelDB
         for e in response.entries:
             self.db.Put(bytearray(e.key, encoding="utf8"), bytearray(e.value, encoding="utf8"))
+        
+        logger.info("LevelDB synced!")
 
         return
 
     def Sync(self, request, context):
+        logger = getLogger(__name__)
+        logger.info("Sync request received")
+
         # get all data from levelDB
         itr = self.db.RangeIter()
         data = []
         for key, value in itr:
             data.append(chainreplication_pb2.KVPair(key=key, value=value))
+
+        logger.info("Sending fetched data from LevelDB...")
+        
         # send it to new tail
         return chainreplication_pb2.SyncResponse(success=True, entries=data)
     
     def __appendEntries(self, request:chainreplication_pb2.AppendEntriesRequest):
+        logger = getLogger(__name__)
         if self.peer == "":
             return
-            
+        
+        logger.info("Appending entries to "+ self.peer)
         with grpc.insecure_channel(self.peer) as channel:
             stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
             response = chainreplication_pb2.AppendEntriesResponse(success=False)
@@ -162,18 +205,26 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                         seqnum=request.seqnum, command=request.command,
                         key=request.key, value=request.value, client=request.client))
                 except Exception as e:
+                    logger.error("GRPC exception " + str(e))
                     time.sleep(0.5)
                     continue
+        
+        logger.info("Append Entries successful")
             # TODO
             # self.sentQueue.append()
         return
 
     def AppendEntries(self, request:chainreplication_pb2.AppendEntriesRequest, context):
+        logger = getLogger(__name__)
         while self.bootstrap == True:
             time.sleep(0.5)
         
+        logger.info("AppendEntries request received")
+
         # commit to db
         self.db.Put(bytearray(request.key, encoding="utf8"), bytearray(request.value, encoding="utf8"))
+
+        logger.info("Commited entry")
 
         # send to peer in FIFO order
         # threadpoolexecutor uses python's SimpleQueue internally
@@ -188,42 +239,56 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                         stub.PutResult(database_pb2.PutResultRequest(seqnum=request.seqnum, success=True))
                         break
                     except Exception as e:
+                        logger.error("GRPC exception " + str(e))
                         time.sleep(0.5)
-
+            
+            logger.info("Sent put response to client")
+    
         return chainreplication_pb2.AppendEntriesResponse(success=True)
     
     def Get(self, request, context):
+        logger = getLogger(__name__)
         # respond only if tail
+
         if self.tail == self.mycrnodeport:
+            logger.info("Get request received")
             val = self.db.Get(bytearray(request.key, 'utf-8')).decode()
             return database_pb2.GetResponse(error="", value=val)
+        
+        logger.debug("Get request sent to non-tail server")
+
         return database_pb2.GetResponse(error="contact tail", value="")
     
     def Put(self, request, context):
+        logger = getLogger(__name__)
+
         if self.head == self.mycrnodeport:
+            logger.info("Put request received")
+
             self.AppendEntries(chainreplication_pb2.AppendEntriesRequest(seqnum=request.seqnum, command="PUT", key=request.key, value=request.value, client=context.peer()))
             return database_pb2.PutResponse(error="")
+        
+        logger.debug("Get request sent to non-head server")
+
         return database_pb2.PutResponse(error="contact head")
 
-    def setupDB(self, id):
+    def setupDB(self, uid):
         '''
         Helper method to set up levelDB
         '''
-        dbpath = './{}_db'.format(id)
+        dbpath = './{}_db'.format(uid)
         from shutil import rmtree
         rmtree(dbpath, ignore_errors=True)
         self.db = leveldb.LevelDB(dbpath)
         return
     
     def signalHandler(self, sig, frame):
-        print('Server exiting!!')
+        getLogger(__name__).info('Server exiting!!')
         self.crserver.stop()
         self.dbserver.stop()
         self.crthreadpool.shutdown(cancel_futures=True)
         self.zk.stop()
         exit(0)
-
-
 
 if __name__ == "__main__":
     # parse CLI inputs
