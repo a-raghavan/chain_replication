@@ -18,6 +18,7 @@ message GetRequest {
 }
 
 message GetResponse {
+  string error = 1;
   string value = 2;
 }
 
@@ -28,7 +29,7 @@ message PutRequest {
 }
 
 message PutResponse {
-
+  string error = 1;
 }
 
 // I should perhaps use a different proto file for this, but meh

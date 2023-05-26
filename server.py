@@ -151,7 +151,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
     def __appendEntries(self, request:chainreplication_pb2.AppendEntriesRequest):
         if self.peer == "":
             return
-
+            
         with grpc.insecure_channel(self.peer) as channel:
             stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
             response = chainreplication_pb2.AppendEntriesResponse(success=False)
@@ -169,6 +169,9 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         return
 
     def AppendEntries(self, request:chainreplication_pb2.AppendEntriesRequest, context):
+        while self.bootstrap == True:
+            time.sleep(0.5)
+        
         # commit to db
         self.db.Put(bytearray(request.key, encoding="utf8"), bytearray(request.value, encoding="utf8"))
 
@@ -190,12 +193,17 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         return chainreplication_pb2.AppendEntriesResponse(success=True)
     
     def Get(self, request, context):
-        # TODO
-        return database_pb2.GetResponse(value='')
+        # respond only if tail
+        if self.tail == self.mycrnodeport:
+            val = self.db.Get(bytearray(request.key, 'utf-8')).decode()
+            return database_pb2.GetResponse(error="", value=val)
+        return database_pb2.GetResponse(error="contact tail", value="")
     
     def Put(self, request, context):
-        # TODO
-        return database_pb2.PutResponse(errormsg='')
+        if self.head == self.mycrnodeport:
+            self.AppendEntries(chainreplication_pb2.AppendEntriesRequest(seqnum=request.seqnum, command="PUT", key=request.key, value=request.value, client=context.peer()))
+            return database_pb2.PutResponse(error="")
+        return database_pb2.PutResponse(error="contact head")
 
     def setupDB(self, id):
         '''

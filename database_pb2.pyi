@@ -11,10 +11,12 @@ class GetRequest(_message.Message):
     def __init__(self, key: _Optional[str] = ...) -> None: ...
 
 class GetResponse(_message.Message):
-    __slots__ = ["value"]
+    __slots__ = ["success", "value"]
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
+    success: str
     value: str
-    def __init__(self, value: _Optional[str] = ...) -> None: ...
+    def __init__(self, success: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class PutRequest(_message.Message):
     __slots__ = ["key", "seqnum", "value"]
