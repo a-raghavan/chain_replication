@@ -4,6 +4,11 @@ Strongly consistent system with simple fault recovery, high availability and hig
 ## Dependencies
 See setup.sh
 
+## Building protos
+```sh
+python3 -m grpc_tools.protoc -I ./protos --python_out=. --pyi_out=. --grpc_python_out=. ./protos/*
+```
+
 ## Running the server
 Start zookeeper at default port 2181
 ```sh
