@@ -17,6 +17,11 @@ import threading
 from concurrent import futures
 import logging
 
+# TODO:
+# 1. ACK logic
+# 2. Handle Failures
+# 3. Lock leveldb for concurrent threads - AppendEntries and Sync
+
 logLevel = logging.DEBUG        # update log level to display appropriate logs to console
 
 def getLogger(source):
@@ -67,6 +72,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         # instantiate levelDB
         self.setupDB(crNodePort.split(':')[1])
+        self.dblock = threading.Lock()
         logger.debug("LevelDB set up")
 
         self.crthreadpool = futures.ThreadPoolExecutor(max_workers=1)
@@ -202,15 +208,19 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         return
 
     def Sync(self, request, context):
+        while self.bootstrap == True:
+            time.sleep(0.5)
+        
         # handle sync request from new tail
         logger = getLogger(self.Sync.__qualname__)
         logger.info("Sync request received")
 
         # get all data from levelDB
-        itr = self.db.RangeIter()
-        data = []
-        for key, value in itr:
-            data.append(chainreplication_pb2.KVPair(key=key, value=value))
+        with self.dblock:
+            itr = self.db.RangeIter()
+            data = []
+            for key, value in itr:
+                data.append(chainreplication_pb2.KVPair(key=key, value=value))
 
         logger.info("Sending fetched data from LevelDB...")
 
@@ -257,7 +267,8 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger.info("AppendEntries request received")
 
         # commit to db
-        self.db.Put(bytearray(request.key, encoding="utf8"), bytearray(request.value, encoding="utf8"))
+        with self.dblock:
+            self.db.Put(bytearray(request.key, encoding="utf8"), bytearray(request.value, encoding="utf8"))
 
         logger.info("Commited entry")
 
@@ -312,9 +323,8 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         return database_pb2.PutResponse(error="contact head")
 
     def setupDB(self, uid):
-        '''
-        Helper method to set up levelDB
-        '''
+        # Helper method to set up levelDB
+
         dbpath = './{}_db'.format(uid)
         from shutil import rmtree
         rmtree(dbpath, ignore_errors=True)
