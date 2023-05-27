@@ -10,6 +10,7 @@ package cr;
 service ChainReplication {
   rpc Sync (SyncRequest) returns (SyncResponse) {}
   rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc Ack (AckRequest) returns (AckResponse) {}
 }
 
 message AppendEntriesRequest {
@@ -36,4 +37,12 @@ message SyncRequest {
 message SyncResponse {
   bool success = 1;
   repeated KVPair entries = 2;
+}
+
+message AckRequest {
+  int64 seqnum = 1;
+}
+
+message AckResponse {
+
 }

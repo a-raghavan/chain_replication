@@ -5,6 +5,16 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class AckRequest(_message.Message):
+    __slots__ = ["seqnum"]
+    SEQNUM_FIELD_NUMBER: _ClassVar[int]
+    seqnum: int
+    def __init__(self, seqnum: _Optional[int] = ...) -> None: ...
+
+class AckResponse(_message.Message):
+    __slots__ = []
+    def __init__(self) -> None: ...
+
 class AppendEntriesRequest(_message.Message):
     __slots__ = ["client", "command", "key", "seqnum", "value"]
     CLIENT_FIELD_NUMBER: _ClassVar[int]

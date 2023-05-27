@@ -24,6 +24,11 @@ class ChainReplicationStub(object):
                 request_serializer=chainreplication__pb2.AppendEntriesRequest.SerializeToString,
                 response_deserializer=chainreplication__pb2.AppendEntriesResponse.FromString,
                 )
+        self.Ack = channel.unary_unary(
+                '/cr.ChainReplication/Ack',
+                request_serializer=chainreplication__pb2.AckRequest.SerializeToString,
+                response_deserializer=chainreplication__pb2.AckResponse.FromString,
+                )
 
 
 class ChainReplicationServicer(object):
@@ -41,6 +46,12 @@ class ChainReplicationServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Ack(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ChainReplicationServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -53,6 +64,11 @@ def add_ChainReplicationServicer_to_server(servicer, server):
                     servicer.AppendEntries,
                     request_deserializer=chainreplication__pb2.AppendEntriesRequest.FromString,
                     response_serializer=chainreplication__pb2.AppendEntriesResponse.SerializeToString,
+            ),
+            'Ack': grpc.unary_unary_rpc_method_handler(
+                    servicer.Ack,
+                    request_deserializer=chainreplication__pb2.AckRequest.FromString,
+                    response_serializer=chainreplication__pb2.AckResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -95,5 +111,22 @@ class ChainReplication(object):
         return grpc.experimental.unary_unary(request, target, '/cr.ChainReplication/AppendEntries',
             chainreplication__pb2.AppendEntriesRequest.SerializeToString,
             chainreplication__pb2.AppendEntriesResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Ack(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/cr.ChainReplication/Ack',
+            chainreplication__pb2.AckRequest.SerializeToString,
+            chainreplication__pb2.AckResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

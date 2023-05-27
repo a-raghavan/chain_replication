@@ -18,9 +18,10 @@ from concurrent import futures
 import logging
 
 # TODO:
-# 1. ACK logic
+# 1. ACK logic DONE
 # 2. Handle Failures
-# 3. Lock leveldb for concurrent threads - AppendEntries and Sync
+# 3. apportioned queries
+# 4. Testing
 
 logLevel = logging.DEBUG        # update log level to display appropriate logs to console
 
@@ -32,21 +33,6 @@ def getLogger(source):
     logger.addHandler(c_handler)
     logger.setLevel(logLevel)
     return logger
-
-class QueueEntryState(Enum):
-    INIT = 0
-    SENT = 1
-    RECD = 2
-    ACKD = 3
-
-class QueueEntry:
-    def __init__(self, seqnum, cmd, key, value, client, state) -> None:
-        self.seqnum = seqnum
-        self.command = cmd
-        self.key = key
-        self.value = value
-        self.client = client
-        self.state = state
 
 class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, database_pb2_grpc.DatabaseServicer):
 
@@ -76,6 +62,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger.debug("LevelDB set up")
 
         self.crthreadpool = futures.ThreadPoolExecutor(max_workers=1)
+        self.ackthreadpool = futures.ThreadPoolExecutor(max_workers=1)
 
         # start chain replication grpc server thread
         self.crthread = threading.Thread(target=self.__chainReplicationListener, args=(crNodePort, ))
@@ -92,12 +79,13 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             logger.info("I am the only server")
             self.head = crNodePort
             self.tail = crNodePort
+            self.prev = ""
             
             self.zk.set("/head", crNodePort.encode())
             logger.info("ZK head node updated")
         else:
             # sync from curr tail
-            self.syncWithCurrentTail(max(peers))
+            self.prev = self.syncWithCurrentTail(max(peers))
             logger.info("Sync completed with current tail")
             
             self.tail = crNodePort
@@ -109,7 +97,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         self.dbthread = threading.Thread(target=self.__databaseListener, args=(dbNodePort, ))
         self.dbthread.start()
 
-        self.peer = ""                           # peer is initially none since i'm the tail
+        self.next = ""                           # peer is initially none since i'm the tail
         self.sentQueue = deque()                 # sent queue contains entries sent to peer not acked by tail
 
         # setup ZK watchers
@@ -144,18 +132,31 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger = getLogger(self.clusterChanged.__qualname__)
         
         if event.type == EventType.CHILD:
-            peers = self.zk.get_children("/cluster")
-            try:
-                mynextnode = next(pnode for pnode in peers if pnode > self.myzknode)
-                peernodeport = self.zk.get("/cluster/" + mynextnode)[0].decode()
-            except StopIteration as e:
-                peernodeport = ""
+            peers = self.zk.get_children("/cluster").sort()
+            currNode, currNodeIdx = next( (idx, pnode) for (idx, pnode) in enumerate(peers) if pnode == self.myzknode)
             
-            if self.peer != peernodeport:
-                logger.info("Peer updated to " + peernodeport)
+            # update next peer
+            if currNodeIdx == len(peers)-1:
+                nextpeernodeport = ""
+            else:
+                mynextnode = peers[currNodeIdx+1]
+                nextpeernodeport = self.zk.get("/cluster/" + mynextnode)[0].decode()
+            
+            # update prev peer
+            if currNodeIdx == 0:
+                prevpeernodeport = ""
+            else:
+                myprevnode = peers[currNodeIdx-1]
+                prevpeernodeport = self.zk.get("/cluster/" + myprevnode)[0].decode()
+            
+            if self.next != prevpeernodeport:
+                logger.info("Prev peer updated to " + prevpeernodeport)
+            
+            if self.prev != nextpeernodeport:
+                logger.info("Next peer updated to " + nextpeernodeport)
 
-            self.peer = peernodeport
-            # TODO how to send missed updates when a node crashes?
+            self.next = nextpeernodeport
+            self.prev = prevpeernodeport
 
     def __del__(self):
         self.zk.stop()
@@ -204,8 +205,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             self.db.Put(bytearray(e.key, encoding="utf8"), bytearray(e.value, encoding="utf8"))
         
         logger.info("LevelDB synced!")
-
-        return
+        return tailNodePort
 
     def Sync(self, request, context):
         while self.bootstrap == True:
@@ -232,13 +232,13 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger = getLogger(self.__appendEntries.__qualname__)
 
         # I am the tail, no need to append
-        if self.peer == "":
+        if self.next == "":
             return
         
-        logger.info("Appending entries to "+ self.peer)
+        logger.info("Appending entries to "+ self.next)
 
         # append entries to peer
-        with grpc.insecure_channel(self.peer) as channel:
+        with grpc.insecure_channel(self.next) as channel:
             stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
             response = chainreplication_pb2.AppendEntriesResponse(success=False)
             while response.success == False:
@@ -253,8 +253,12 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                     continue
         
         logger.info("Append Entries successful")
-            # TODO
-            # self.sentQueue.append()
+        
+        self.sentQueue.append(chainreplication_pb2.AppendEntriesRequest(
+                        seqnum=request.seqnum, command=request.command,
+                        key=request.key, value=request.value, client=request.client))
+        logger.debug("Added entry to sent queue")
+        
         return
 
     def AppendEntries(self, request:chainreplication_pb2.AppendEntriesRequest, context):
@@ -289,9 +293,40 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                         time.sleep(0.5)
             
             logger.info("Sent put response to client")
+            
+            self.ackthreadpool.submit(self.Ack, chainreplication_pb2.AckRequest(seqnum=request.seqnum))
+            logger.info("Submitted ACK job to threadpool")
     
         return chainreplication_pb2.AppendEntriesResponse(success=True)
     
+    def Ack(self, request, context):
+        logger = getLogger(self.Ack.__qualname__)
+        if self.sentQueue[0].seqnum == request.seqnum:
+            logger.critical("Received Ack for a request not in queue front :(")
+            # maybe an old RPC reaching the server??
+            return chainreplication_pb2.AckResponse()
+        
+        self.sentQueue.popleft()
+        logger.debug("Removed completed update request from sent queue")
+        
+        if self.prev == "":
+            # I am head
+            return
+        
+        with grpc.insecure_channel(self.prev) as channel:
+            stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
+            while True:
+                try:
+                    stub.Ack(chainreplication_pb2.AckRequest(seqnum=request.seqnum))
+                    break
+                except Exception as e:
+                    logger.error("GRPC exception " + str(e))
+                    time.sleep(0.5)
+            
+        logger.info("Ack successful to prev peer")
+
+        return chainreplication_pb2.AckResponse()
+
     def Get(self, request, context):
         # handle incoming get requests
 

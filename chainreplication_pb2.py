@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63hainreplication.proto\x12\x02\x63r\"c\n\x14\x41ppendEntriesRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ommand\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\r\n\x05value\x18\x04 \x01(\t\x12\x0e\n\x06\x63lient\x18\x05 \x01(\t\"(\n\x15\x41ppendEntriesResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"$\n\x06KVPair\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\r\n\x0bSyncRequest\"<\n\x0cSyncResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x1b\n\x07\x65ntries\x18\x02 \x03(\x0b\x32\n.cr.KVPair2\x87\x01\n\x10\x43hainReplication\x12+\n\x04Sync\x12\x0f.cr.SyncRequest\x1a\x10.cr.SyncResponse\"\x00\x12\x46\n\rAppendEntries\x12\x18.cr.AppendEntriesRequest\x1a\x19.cr.AppendEntriesResponse\"\x00\x42&\n\x13io.grpc.examples.crB\x07\x43RProtoP\x01\xa2\x02\x03HLWb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x63hainreplication.proto\x12\x02\x63r\"c\n\x14\x41ppendEntriesRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\x12\x0f\n\x07\x63ommand\x18\x02 \x01(\t\x12\x0b\n\x03key\x18\x03 \x01(\t\x12\r\n\x05value\x18\x04 \x01(\t\x12\x0e\n\x06\x63lient\x18\x05 \x01(\t\"(\n\x15\x41ppendEntriesResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"$\n\x06KVPair\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\r\n\x0bSyncRequest\"<\n\x0cSyncResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x1b\n\x07\x65ntries\x18\x02 \x03(\x0b\x32\n.cr.KVPair\"\x1c\n\nAckRequest\x12\x0e\n\x06seqnum\x18\x01 \x01(\x03\"\r\n\x0b\x41\x63kResponse2\xb1\x01\n\x10\x43hainReplication\x12+\n\x04Sync\x12\x0f.cr.SyncRequest\x1a\x10.cr.SyncResponse\"\x00\x12\x46\n\rAppendEntries\x12\x18.cr.AppendEntriesRequest\x1a\x19.cr.AppendEntriesResponse\"\x00\x12(\n\x03\x41\x63k\x12\x0e.cr.AckRequest\x1a\x0f.cr.AckResponse\"\x00\x42&\n\x13io.grpc.examples.crB\x07\x43RProtoP\x01\xa2\x02\x03HLWb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'chainreplication_pb2', globals())
@@ -31,6 +31,10 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _SYNCREQUEST._serialized_end=224
   _SYNCRESPONSE._serialized_start=226
   _SYNCRESPONSE._serialized_end=286
-  _CHAINREPLICATION._serialized_start=289
-  _CHAINREPLICATION._serialized_end=424
+  _ACKREQUEST._serialized_start=288
+  _ACKREQUEST._serialized_end=316
+  _ACKRESPONSE._serialized_start=318
+  _ACKRESPONSE._serialized_end=331
+  _CHAINREPLICATION._serialized_start=334
+  _CHAINREPLICATION._serialized_end=511
 # @@protoc_insertion_point(module_scope)
