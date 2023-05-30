@@ -224,7 +224,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
     def Sync(self, request, context):
         while self.bootstrap == True:
-            time.sleep(0.5)
+            time.sleep(0.1)
         
         # handle sync request from new tail
         logger = getLogger(self.Sync.__qualname__)
@@ -299,7 +299,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         # handle incoming append entries
         logger = getLogger(self.AppendEntries.__qualname__)
         while self.bootstrap == True or self.crashrecovery == True:
-            time.sleep(0.5)
+            time.sleep(0.1)
         
         logger.info("AppendEntries request received")
 
