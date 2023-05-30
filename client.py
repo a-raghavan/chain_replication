@@ -14,13 +14,15 @@ class DB(database_pb2_grpc.DatabaseServicer):
         self.dbserver.wait_for_termination()
 
     def __init__(self):
+        self.seqnum = 0
         self.dbthead = threading.Thread(target=self.__dblistener, args=())
         self.dbthead.start()
     
     def put(self, k, v):
         with grpc.insecure_channel("localhost:50051") as channel:
             stub = database_pb2_grpc.DatabaseStub(channel)
-            response = stub.Put(database_pb2.PutRequest(seqnum=1, key=k, value=v, client="localhost:55555"))
+            self.seqnum += 1
+            response = stub.Put(database_pb2.PutRequest(seqnum=self.seqnum, key=k, value=v, client="localhost:55555"))
     
     def PutResult(self, request, context):
         print("Put successful, seqnum - ", request.seqnum)
@@ -34,11 +36,11 @@ class DB(database_pb2_grpc.DatabaseServicer):
 
 
 if __name__ == "__main__":
+    import random
     db = DB()
-    db.put("akshay", "raghavan")
-    db.put("lalo", "salamanca")
-    time.sleep(1)
-    db.get("lalo")
-    db.get("akshay")
+    for i in range(100):
+        db.put("raghavan", str(random.randint(1, 1000)))
+        time.sleep(0.5)
+    print("Done!")
     db.dbthead.join()
     

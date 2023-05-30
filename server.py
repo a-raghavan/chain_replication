@@ -19,9 +19,8 @@ from concurrent import futures
 import logging
 
 # TODO:
-# 1. ACK logic DONE
-# 2. Handle Failures
-# 3. apportioned queries
+# 1. Testing
+# 2. apportioned queries
 
 logLevel = logging.DEBUG          # update log level to display appropriate logs to console
 
@@ -43,6 +42,9 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         # It starts propagating new reqs to the new node. 
         # This is queued up until the synchroniztion (i.e bootstrap) is completed
         self.bootstrap = True
+
+        # Used to serialize appendEntries during crash failures
+        self.crashrecovery = False
         
         self.mycrnodeport = crNodePort        # my CR node port
 
@@ -147,17 +149,27 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger.info("Prev peer is now - " + prevpeernodeport)
         logger.info("Next peer is now - " + nextpeernodeport)
 
+        nextcrashed = (self.next != nextpeernodeport)
+
         # update head and tail if changed
         if prevpeernodeport == "" and self.prev != prevpeernodeport:
             self.zk.set("/head", self.mycrnodeport.encode())
-        
+
         if nextpeernodeport == "" and self.next != nextpeernodeport:
             self.zk.set("/tail", self.mycrnodeport.encode())
 
         self.next = nextpeernodeport
         self.prev = prevpeernodeport
         
-        # TODO handle failures
+        # Handle failures
+        if nextcrashed:
+            logger.info("Next failed, resending items in sent queue...")
+            self.crashrecovery = True
+            while len(self.sentQueue) != 0:
+                self.crthreadpool.submit(self.__appendEntries, self.sentQueue.popleft())
+                #self.AppendEntries(self.sentQueue.popleft(), None)
+            self.crashrecovery = False
+            logger.info("Resend successful")
 
     def __del__(self):
         self.zk.stop()
@@ -184,6 +196,8 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
     def syncWithCurrentTail(self, tailzknode):
         logger = getLogger(self.syncWithCurrentTail.__qualname__)
+
+        # TODO fetch latest tail nodeport upon GRPC failure
 
         # get current tail
         tailNodePort = self.zk.get("/cluster/"+tailzknode)[0]
@@ -232,15 +246,17 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         # helper thread to propagate entries down the chain
         logger = getLogger(self.__appendEntries.__qualname__)
 
-        # I am the tail, no need to append
+        # I am not the tail
         if self.next != "":
             logger.info("Appending entries to "+ self.next)
 
             # append entries to peer
-            with grpc.insecure_channel(self.next) as channel:
-                stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
-                response = chainreplication_pb2.AppendEntriesResponse(success=False)
-                while response.success == False:
+            response = chainreplication_pb2.AppendEntriesResponse(success=False)
+            while response.success == False:
+                # self.next may change to server crashes. 
+                # Hence, it is essential that self.next is within the while loop
+                with grpc.insecure_channel(self.next) as channel:
+                    stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
                     try:
                         response = stub.AppendEntries(
                             chainreplication_pb2.AppendEntriesRequest(
@@ -257,6 +273,24 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
                         seqnum=request.seqnum, command=request.command,
                         key=request.key, value=request.value, client=request.client))
         logger.debug("Added entry to sent queue")
+
+        # i am the tail, need to respond to client and initiate ACK flow
+        if self.next == "":
+            with grpc.insecure_channel(request.client) as channel:
+                stub = database_pb2_grpc.DatabaseStub(channel)
+                # what happens if client crashes? maybe try like 10 times and exit?
+                for _ in range(10):
+                    try:
+                        stub.PutResult(database_pb2.PutResultRequest(seqnum=request.seqnum, success=True))
+                        break
+                    except Exception as e:
+                        logger.error("GRPC exception " + str(e))
+                        time.sleep(0.5)
+            
+            logger.info("Sent put response to client")
+            
+            self.ackthreadpool.submit(self.Ack, chainreplication_pb2.AckRequest(seqnum=request.seqnum), None)
+            logger.info("Submitted ACK job to threadpool")
         
         return
 
@@ -264,7 +298,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         # handle incoming append entries
         logger = getLogger(self.AppendEntries.__qualname__)
-        while self.bootstrap == True:
+        while self.bootstrap == True or self.crashrecovery == True:
             time.sleep(0.5)
         
         logger.info("AppendEntries request received")
@@ -277,27 +311,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         # send to peer in FIFO order
         # threadpoolexecutor uses python's SimpleQueue internally
-        if self.tail != self.mycrnodeport:
-           self.crthreadpool.submit(self.__appendEntries, request)
-
-        # if tail, send response to client
-        else:
-            # to avoid race condition
-            self.__appendEntries(request=request)
-            with grpc.insecure_channel(request.client) as channel:
-                stub = database_pb2_grpc.DatabaseStub(channel)
-                while True:
-                    try:
-                        stub.PutResult(database_pb2.PutResultRequest(seqnum=request.seqnum, success=True))
-                        break
-                    except Exception as e:
-                        logger.error("GRPC exception " + str(e))
-                        time.sleep(0.5)
-            
-            logger.info("Sent put response to client")
-            
-            self.ackthreadpool.submit(self.Ack, chainreplication_pb2.AckRequest(seqnum=request.seqnum), None)
-            logger.info("Submitted ACK job to threadpool")
+        self.crthreadpool.submit(self.__appendEntries, request)
     
         return chainreplication_pb2.AppendEntriesResponse(success=True)
     
@@ -316,9 +330,11 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             # I am head
             return chainreplication_pb2.AckResponse()           # doesnt matter
         
-        with grpc.insecure_channel(self.prev) as channel:
-            stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
-            while True:
+        while True:
+            # self.prev may change to server crashes. 
+            # Hence, it is essential that self.prev is within the while loop
+            with grpc.insecure_channel(self.prev) as channel:
+                stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
                 try:
                     stub.Ack(chainreplication_pb2.AckRequest(seqnum=request.seqnum))
                     break
