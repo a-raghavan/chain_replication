@@ -277,10 +277,13 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         # send to peer in FIFO order
         # threadpoolexecutor uses python's SimpleQueue internally
-        self.crthreadpool.submit(self.__appendEntries, request)
+        if self.tail != self.mycrnodeport:
+           self.crthreadpool.submit(self.__appendEntries, request)
 
         # if tail, send response to client
-        if self.tail == self.mycrnodeport:
+        else:
+            # to avoid race condition
+            self.__appendEntries(request=request)
             with grpc.insecure_channel(request.client) as channel:
                 stub = database_pb2_grpc.DatabaseStub(channel)
                 while True:
