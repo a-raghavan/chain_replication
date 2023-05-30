@@ -36,7 +36,9 @@ class DB(database_pb2_grpc.DatabaseServicer):
 if __name__ == "__main__":
     db = DB()
     db.put("akshay", "raghavan")
+    db.put("lalo", "salamanca")
     time.sleep(1)
+    db.get("lalo")
     db.get("akshay")
     db.dbthead.join()
     

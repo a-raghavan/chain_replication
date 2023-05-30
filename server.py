@@ -22,7 +22,6 @@ import logging
 # 1. ACK logic DONE
 # 2. Handle Failures
 # 3. apportioned queries
-# 4. Testing
 
 logLevel = logging.DEBUG          # update log level to display appropriate logs to console
 
@@ -222,7 +221,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             itr = self.db.RangeIter()
             data = []
             for key, value in itr:
-                data.append(chainreplication_pb2.KVPair(key=key, value=value))
+                data.append(chainreplication_pb2.KVPair(key=key.decode(), value=value.decode()))
 
         logger.info("Sending fetched data from LevelDB...")
 
