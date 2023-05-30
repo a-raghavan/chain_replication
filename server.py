@@ -24,7 +24,7 @@ import logging
 # 3. apportioned queries
 # 4. Testing
 
-logLevel = logging.CRITICAL+1        # update log level to display appropriate logs to console
+logLevel = logging.DEBUG          # update log level to display appropriate logs to console
 
 def getLogger(source):
     logger = logging.getLogger(source)
@@ -77,36 +77,33 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger.info("Zookeeper cluster updated, mynode = " + self.myzknode)
 
         if len(peers) == 0:
+            # first node
             logger.info("I am the only server")
-            self.head = crNodePort
-            self.tail = crNodePort
-            self.prev = ""
-            
             self.zk.set("/head", crNodePort.encode())
             logger.info("ZK head node updated")
         else:
             # sync from curr tail
-            self.prev = self.syncWithCurrentTail(max(peers))
+            self.syncWithCurrentTail(max(peers))
             logger.info("Sync completed with current tail")
-            
-            self.tail = crNodePort
         
         self.zk.set("/tail", crNodePort.encode())
         logger.info("ZK tail node updated")
 
-        # start gRPC database server thread
-        self.dbthread = threading.Thread(target=self.__databaseListener, args=(dbNodePort, ))
-        self.dbthread.start()
+        self.next = ""
+        self.prev = ""
+        
+        # sent queue contains entries sent to peer not acked by tail
+        self.sentQueue = deque()
 
-        self.next = ""                           # peer is initially none since i'm the tail
-        self.sentQueue = deque()                 # sent queue contains entries sent to peer not acked by tail
-
-        # setup ZK watchers
+        # setup ZK watchers and update self.next && self.prev
         self.tailwatcher = DataWatch(self.zk, "/tail", self.tailChanged)
         self.headwatcher = DataWatch(self.zk, "/head", self.headChanged)
         self.clusterwatcher = ChildrenWatch(self.zk, "/cluster", self.clusterChanged)
-
         logger.debug("ZK Watchers enabled")
+
+        # start gRPC database server thread
+        self.dbthread = threading.Thread(target=self.__databaseListener, args=(dbNodePort, ))
+        self.dbthread.start()
 
         signal.signal(signal.SIGINT, self.signalHandler)
 
@@ -210,7 +207,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             self.db.Put(bytearray(e.key, encoding="utf8"), bytearray(e.value, encoding="utf8"))
         
         logger.info("LevelDB synced!")
-        return tailNodePort
+        return
 
     def Sync(self, request, context):
         while self.bootstrap == True:
