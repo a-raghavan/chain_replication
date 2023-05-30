@@ -233,27 +233,25 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         logger = getLogger(self.__appendEntries.__qualname__)
 
         # I am the tail, no need to append
-        if self.next == "":
-            return
-        
-        logger.info("Appending entries to "+ self.next)
+        if self.next != "":
+            logger.info("Appending entries to "+ self.next)
 
-        # append entries to peer
-        with grpc.insecure_channel(self.next) as channel:
-            stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
-            response = chainreplication_pb2.AppendEntriesResponse(success=False)
-            while response.success == False:
-                try:
-                    response = stub.AppendEntries(
-                        chainreplication_pb2.AppendEntriesRequest(
-                        seqnum=request.seqnum, command=request.command,
-                        key=request.key, value=request.value, client=request.client))
-                except Exception as e:
-                    logger.error("GRPC exception " + str(e))
-                    time.sleep(0.5)
-                    continue
-        
-        logger.info("Append Entries successful")
+            # append entries to peer
+            with grpc.insecure_channel(self.next) as channel:
+                stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
+                response = chainreplication_pb2.AppendEntriesResponse(success=False)
+                while response.success == False:
+                    try:
+                        response = stub.AppendEntries(
+                            chainreplication_pb2.AppendEntriesRequest(
+                            seqnum=request.seqnum, command=request.command,
+                            key=request.key, value=request.value, client=request.client))
+                    except Exception as e:
+                        logger.error("GRPC exception " + str(e))
+                        time.sleep(0.5)
+                        continue
+            
+            logger.info("Append Entries successful")
         
         self.sentQueue.append(chainreplication_pb2.AppendEntriesRequest(
                         seqnum=request.seqnum, command=request.command,
@@ -295,13 +293,14 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
             
             logger.info("Sent put response to client")
             
-            self.ackthreadpool.submit(self.Ack, chainreplication_pb2.AckRequest(seqnum=request.seqnum))
+            self.ackthreadpool.submit(self.Ack, chainreplication_pb2.AckRequest(seqnum=request.seqnum), None)
             logger.info("Submitted ACK job to threadpool")
     
         return chainreplication_pb2.AppendEntriesResponse(success=True)
     
     def Ack(self, request, context):
         logger = getLogger(self.Ack.__qualname__)
+        #print("AAAA", self.sentQueue[0].seqnum,  request.seqnum)
         if self.sentQueue[0].seqnum == request.seqnum:
             logger.critical("Received Ack for a request not in queue front :(")
             # maybe an old RPC reaching the server??
