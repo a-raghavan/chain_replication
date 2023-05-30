@@ -1,5 +1,6 @@
 from kazoo.client import KazooClient
-from kazoo.protocol.states import EventType
+from kazoo.recipe.watchers import DataWatch
+from kazoo.recipe.watchers import ChildrenWatch
 
 import leveldb
 import grpc
@@ -23,12 +24,12 @@ import logging
 # 3. apportioned queries
 # 4. Testing
 
-logLevel = logging.DEBUG        # update log level to display appropriate logs to console
+logLevel = logging.CRITICAL+1        # update log level to display appropriate logs to console
 
 def getLogger(source):
     logger = logging.getLogger(source)
     c_handler = logging.StreamHandler()
-    c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+    c_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
     c_handler.setFormatter(c_format)
     logger.addHandler(c_handler)
     logger.setLevel(logLevel)
@@ -101,9 +102,10 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         self.sentQueue = deque()                 # sent queue contains entries sent to peer not acked by tail
 
         # setup ZK watchers
-        self.zk.get("/tail", watch=self.tailChanged)
-        self.zk.get("/head", watch=self.tailChanged)
-        self.zk.get_children("/cluster", watch=self.clusterChanged)
+        self.tailwatcher = DataWatch(self.zk, "/tail", self.tailChanged)
+        self.headwatcher = DataWatch(self.zk, "/head", self.headChanged)
+        self.clusterwatcher = ChildrenWatch(self.zk, "/cluster", self.clusterChanged)
+
         logger.debug("ZK Watchers enabled")
 
         signal.signal(signal.SIGINT, self.signalHandler)
@@ -113,50 +115,53 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
 
         return
 
-    def tailChanged(self, event):
+    def tailChanged(self, data, stat):
         # update tail when changed
         logger = getLogger(self.tailChanged.__qualname__)
-        if event.type == EventType.CHANGED:
-            self.tail = self.zk.get("/tail")[0].decode()
-            logger.info("Tail updated to " + self.tail)
+        self.tail = data.decode()
+        logger.info("Tail updated to "+ data.decode())
     
-    def headChanged(self, event):
+    def headChanged(self, data, stat):
         # update head when changed
         logger = getLogger(self.headChanged.__qualname__)
-        if event.type == EventType.CHANGED:
-            self.head = self.zk.get("/head")[0].decode()
-            logger.info("Head updated to " + self.head)
+        self.head = data.decode()
+        logger.info("Head updated to "+ data.decode())
     
-    def clusterChanged(self, event):
+    def clusterChanged(self, children):
         # update peer when changed
         logger = getLogger(self.clusterChanged.__qualname__)
         
-        if event.type == EventType.CHILD:
-            peers = self.zk.get_children("/cluster").sort()
-            currNode, currNodeIdx = next( (idx, pnode) for (idx, pnode) in enumerate(peers) if pnode == self.myzknode)
-            
-            # update next peer
-            if currNodeIdx == len(peers)-1:
-                nextpeernodeport = ""
-            else:
-                mynextnode = peers[currNodeIdx+1]
-                nextpeernodeport = self.zk.get("/cluster/" + mynextnode)[0].decode()
-            
-            # update prev peer
-            if currNodeIdx == 0:
-                prevpeernodeport = ""
-            else:
-                myprevnode = peers[currNodeIdx-1]
-                prevpeernodeport = self.zk.get("/cluster/" + myprevnode)[0].decode()
-            
-            if self.next != prevpeernodeport:
-                logger.info("Prev peer updated to " + prevpeernodeport)
-            
-            if self.prev != nextpeernodeport:
-                logger.info("Next peer updated to " + nextpeernodeport)
+        peers = sorted(children)
+        currNodeIdx, currNode  = next( (idx, pnode) for (idx, pnode) in enumerate(peers) if pnode == self.myzknode)
+        
+        # update next peer
+        if currNodeIdx == len(peers)-1:
+            nextpeernodeport = ""
+        else:
+            mynextnode = peers[currNodeIdx+1]
+            nextpeernodeport = self.zk.get("/cluster/" + mynextnode)[0].decode()
+        
+        # update prev peer
+        if currNodeIdx == 0:
+            prevpeernodeport = ""
+        else:
+            myprevnode = peers[currNodeIdx-1]
+            prevpeernodeport = self.zk.get("/cluster/" + myprevnode)[0].decode()
+        
+        logger.info("Prev peer is now - " + prevpeernodeport)
+        logger.info("Next peer is now - " + nextpeernodeport)
 
-            self.next = nextpeernodeport
-            self.prev = prevpeernodeport
+        # update head and tail if changed
+        if prevpeernodeport == "" and self.prev != prevpeernodeport:
+            self.zk.set("/head", self.mycrnodeport.encode())
+        
+        if nextpeernodeport == "" and self.next != nextpeernodeport:
+            self.zk.set("/tail", self.mycrnodeport.encode())
+
+        self.next = nextpeernodeport
+        self.prev = prevpeernodeport
+        
+        # TODO handle failures
 
     def __del__(self):
         self.zk.stop()
@@ -311,7 +316,7 @@ class ChainReplicator(chainreplication_pb2_grpc.ChainReplicationServicer, databa
         
         if self.prev == "":
             # I am head
-            return
+            return chainreplication_pb2.AckResponse()           # doesnt matter
         
         with grpc.insecure_channel(self.prev) as channel:
             stub = chainreplication_pb2_grpc.ChainReplicationStub(channel)
